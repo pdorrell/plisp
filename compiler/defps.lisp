@@ -170,6 +170,8 @@
       (currentgray 0 1)
       (sethsbcolor 3 0)
       (currentrhsbcolor 0 3)
+      (setcmykcolor 4 0)
+      (currentcmykcolor 0 4)
       (setrgbcolor 3 0)
       (currentrgbcolor 0 3)
       (setscreen 3 0)

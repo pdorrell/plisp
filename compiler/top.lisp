@@ -4,7 +4,7 @@
 
 ;; ps is the top level entry.  The argument is the file name.
 
-(defun ps (ps-file)
+(defun ps (infile outfile)
     ;; Initialize global structures
     (setf main-program nil)
     (setf error-count 0)
@@ -23,8 +23,11 @@
     (setf current-table main-table)
     (setf current-env (list main-table))
 
+    (setf ps-file-header (list "%!"))
+    (setf ps-file-extension ".ps")
+
     ;; Now, interpret the contents of the file.  
-    (interpret-file (concat ps-file ".pl"))
+    (interpret-file infile)
 
     ;; All function and macro definitions have been sucked in - now compile
     ;; everything down.
@@ -54,17 +57,28 @@
 	 (compile-init-var (pop to-init)))
       (setf init-code code-stream))
 
-    (when (= error-count 0)
-	  (flow-analysis) 
-	  (setf code-stream (list '(null)))
-	  (maphash #'init-non-recursives frame-table)
-	  (setf dict-code code-stream)
+      (if (= error-count 0)
+	  (progn
+	    (flow-analysis) 
+	    (setf code-stream (list '(null)))
+	    (maphash #'init-non-recursives frame-table)
+	    (setf dict-code code-stream)
+	    
+	    (with-open-file
+	     (ps-output outfile
+			:direction :output)
+	     (ps-write-code))
+	    outfile)
+	nil) )
 
-	  (with-open-file
-           (ps-output (concat ps-file ".ps")
-		      :direction :output)
-           (ps-write-code)))
-    nil)
+(defvar preview-postscript-executable "c:/Downloads-Updates/drawing/ghostscript/gsview-4.6/bin/gsview32.exe")
+
+(defun ps-and-show (infile outfile)
+  (let* ( (result (ps infile outfile)) )
+    (if result
+	(progn
+	  (run-program preview-postscript-executable :arguments (list "-e" result) :wait nil)
+	  result) ) ) )
 
 (defun init-non-recursives (x v)
   (if (and (att frame-table x 'non-recursive) (not (eq x '**main**))) 
@@ -73,13 +87,22 @@
 ;;  Here, a file is read in.  Use the lisp reader, read form by form, and
 ;;  hand each form to ps-interpret-form.
 
-(defun interpret-file (fname)
+(defun interpret-file (fname &key filter)
   (let (ps-form)
     (with-open-file
 	(ps-input fname :direction :input)
 	(while (not (eql (setf ps-form (read ps-input nil '***PSEOF***))
 			 '***PSEOF***))
-	       (ps-interpret-form ps-form)))))
+	  (if (or (not filter) (funcall filter ps-form))
+	       (ps-interpret-form ps-form))))))
+
+(defun filter-out-eps-load-library (fm)
+  (if (listp fm)
+      (let ( (sym (car fm)) )
+	(case sym
+	  ((load library eps) nil)
+	  (otherwise t) ) )
+    t) )
 
 ;;  Decide what to do with a random form at the top level.  There are a
 ;;  few special cases, otherwise just tack things onto the end of the
@@ -91,6 +114,8 @@
 	       (cond ((eq fn 'load)
 		      (ps-load (cadr fm)))  ;  recursively load another file
 		                            ;  Note full file name needed here
+		     ((eq fn 'load-filtered)
+		      (ps-load (cadr fm) :filter (eval (caddr fm))) )  ;  
 		     ((eq fn 'defun)
 		      (def-ps-fun (cdr fm))) ; save all defuns
 		     ((eq fn 'defmacro)
@@ -102,6 +127,13 @@
 		     ((eq fn 'eval)
 		      (eval (cadr fm))) ; this is the escape to lisp
 		                        ; Call the lisp evaluator.
+		     ((eq fn 'eps)
+		      (format t "Evaluating eps form with args ~A" (cdr fm))
+		      (apply #'set-eps-header (cdr fm)))
+		     ((eq fn 'quote)) ; do nothing
+		     ((eq fn 'progn)
+		      (dolist (progn-form (cdr fm))
+			(ps-interpret-form progn-form) ) )
 		     ((ps-macro fn)     ; Allow top level macros
 		      (ps-interpret-form (ps-macro-expand fm)))
 		     ((eq fn 'library)
@@ -111,6 +143,25 @@
 		     (t (ps-error "Library file must only have definitions"
 				  fm))))))
 
+(defun make-font-header (header fonts)
+  (if fonts
+      (let ( (font-header header) )
+	(dolist (font fonts)
+	  (setq font-header (concatenate 'string font-header " " font)) )
+	font-header)
+    nil) )
+
+;; EPS header and bounding box
+(defun set-eps-header (x1 y1 x2 y2 &rest document-fonts)
+  (setf ps-file-extension ".eps")
+  (setf ps-file-header 
+	(list
+	 "%!PS-Adobe-3.0 EPSF-3.0"
+	 (format nil "%%BoundingBox: ~D ~D ~D ~D" x1 y1 x2 y2)
+	 (make-font-header "%%DocumentFonts:" document-fonts)
+	 (make-font-header "%%DocumentNeededFonts:" document-fonts)
+	 "%%EndComments"
+	 ) ) )
 
 ;; This is where non special top level forms go
 
@@ -264,8 +315,8 @@
 
 ;; To recursively load a file, just reinvoke the interpreter
 
-(defun ps-load (file)
-    (interpret-file file))
+(defun ps-load (file &key filter)
+    (interpret-file file :filter filter))
 
 (defun wrap-frame ()
   (emit 'end)

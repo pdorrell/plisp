@@ -45,6 +45,8 @@
 
 (defun write-token-1 (tok quote-it)
     (cond ((symbolp tok)  ; a symbol?
+	   (if (or (eq tok t) (eq tok nil))
+	       (setq quote-it nil))
 	   (write-str (or (get tok 'New-ps-name) (ps-symbol-name tok))
 		   nil quote-it)); look for wired in name
 	  ((stringp tok) ; strings get wrapped in parens
@@ -136,7 +138,9 @@
 
 (defun ps-write-code ()
     (setf current-col 0)  ; output column
-    (format ps-output "%!~%")  ; our laser writer spooler needs this
+    (dolist (header-line ps-file-header)
+      (if header-line
+	  (format ps-output "~A~%" header-line) ) ); file header
     (for (:in x (nreverse dict-code))
 	 (:do (write-token x)))
     (for (:in x (nreverse init-code))

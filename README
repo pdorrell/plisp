@@ -21,3 +21,10 @@ don't bother me!!
   John Peterson
   peterson-john@cs.yale.edu
 
+Some files have been altered by Philip Dorrell to enable EPS generation,
+file inclusion, and to fix up functions passed as arguments. To figure out
+what changes I made, download Peterson's original, and do a diff!
+
+These fixes and changes are also public domain.
+
+  Philip Dorrell, http://thinkinghard.com/, 15 July 2013

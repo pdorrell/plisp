@@ -32,3 +32,5 @@
 (defvar unknown-frames nil "Frames being scanned for recursion")
 (defvar main-env nil "Environment for mail program")
 (defvar main-code nil "Holds main program for output routine")
+(defvar ps-file-header nil "Header for output postscript file")
+(defvar ps-file-extension ".ps" "Header for output postscript file")
